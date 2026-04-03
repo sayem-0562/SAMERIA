@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BrowserRouter,
+  HashRouter,
   Link,
   Navigate,
   Route,
@@ -492,10 +493,11 @@ function useAppStore() {
 
 function App() {
   const store = useAppStore()
+  const Router = window.location.hostname.endsWith('github.io') ? HashRouter : BrowserRouter
   return (
-    <BrowserRouter>
+    <Router>
       <AppLayout store={store} />
-    </BrowserRouter>
+    </Router>
   )
 }
 
@@ -677,7 +679,7 @@ function SiteHeader({ state, actions, cartCount, onLogoutClick }) {
     <header className="site-header">
       <div className="container nav-wrap">
         <Link to="/" className="logo-wrap">
-          <img src="/sameria-logo.png" alt="Sameria logo" />
+          <img src={`${import.meta.env.BASE_URL}sameria-logo.png`} alt="Sameria logo" />
           <div>
             <strong>SAMERIA</strong>
             <span>Bangladesh</span>
@@ -789,7 +791,7 @@ function HomePage({ state }) {
             </div>
           </div>
           <div className="hero-logo-card">
-            <img src="/sameria-logo.png" alt="Sameria symbol" />
+            <img src={`${import.meta.env.BASE_URL}sameria-logo.png`} alt="Sameria symbol" />
           </div>
         </div>
       </section>
@@ -2231,7 +2233,7 @@ function SiteFooter() {
     <footer className="site-footer">
       <div className="container footer-grid">
         <div className="footer-brand">
-          <img className="footer-logo" src="/sameria-logo.png" alt="Sameria logo" />
+          <img className="footer-logo" src={`${import.meta.env.BASE_URL}sameria-logo.png`} alt="Sameria logo" />
           <h4>SAMERIA</h4>
           <p>Premium clothing brand in Bangladesh.</p>
         </div>

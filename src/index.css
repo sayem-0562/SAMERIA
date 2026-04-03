@@ -941,6 +941,8 @@ main {
 }
 
 .summary-card > .btn {
+  display: inline-flex;
+  justify-content: center;
   margin-top: 0.35rem;
 }
 
@@ -950,7 +952,7 @@ main {
 }
 
 .summary-card > .btn.btn-solid {
-  margin-top: 0.9rem;
+  margin-top: 1.15rem;
 }
 
 .admin-shell {
