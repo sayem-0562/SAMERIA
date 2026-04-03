@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 768" role="img" aria-labelledby="title desc">
+  <title id="title">Sameria Needle Thread Logo</title>
+  <desc id="desc">Needle and thread monogram on deep teal textile background.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f6e70"/>
+      <stop offset="1" stop-color="#084f52"/>
+    </linearGradient>
+    <linearGradient id="needle" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f5f7fa"/>
+      <stop offset="0.35" stop-color="#b7c0c8"/>
+      <stop offset="0.75" stop-color="#8a949e"/>
+      <stop offset="1" stop-color="#dfe4ea"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#02292a" flood-opacity="0.45"/>
+    </filter>
+    <pattern id="fabric" width="26" height="26" patternUnits="userSpaceOnUse">
+      <path d="M0 13h26M13 0v26" stroke="#9ad1cc" stroke-opacity="0.08" stroke-width="1"/>
+      <path d="M0 0l26 26M26 0L0 26" stroke="#9ad1cc" stroke-opacity="0.03" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="768" height="768" fill="url(#bg)"/>
+  <rect width="768" height="768" fill="url(#fabric)"/>
+
+  <g filter="url(#soft)">
+    <path
+      d="M511 208c58 8 73 91 14 120"
+      fill="none"
+      stroke="#ccb287"
+      stroke-width="17"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M294 431c57 6 143 6 192-6"
+      fill="none"
+      stroke="#ccb287"
+      stroke-width="16"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M473 336c-64-22-190 21-257 94 58 26 129 35 203 29"
+      fill="none"
+      stroke="#ccb287"
+      stroke-width="16"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M382 521l-72 46 168 16"
+      fill="none"
+      stroke="#ccb287"
+      stroke-width="16"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M474 583c64 0 89 25 82 55"
+      fill="none"
+      stroke="#ccb287"
+      stroke-width="16"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </g>
+
+  <g filter="url(#soft)">
+    <path d="M389 195v418" stroke="url(#needle)" stroke-width="19" stroke-linecap="round"/>
+    <path d="M388 193l17 24h-34z" fill="#dbe2e8"/>
+    <path d="M389 612l-11 80h22z" fill="#d6dde4"/>
+    <rect x="380" y="252" width="18" height="41" rx="8" fill="none" stroke="#b7c0c8" stroke-width="5"/>
+  </g>
+</svg>
