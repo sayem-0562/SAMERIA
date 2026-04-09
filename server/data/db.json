@@ -271,5 +271,13 @@
       "active": true
     }
   ],
-  "chatMessages": []
+  "chatMessages": [
+    {
+      "id": "m-1775745402084-q84os",
+      "sender": "user",
+      "text": "hi",
+      "userEmail": "mahi@fjsak.com",
+      "createdAt": 1775745402084
+    }
+  ]
 }

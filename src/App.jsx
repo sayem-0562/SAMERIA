@@ -2200,16 +2200,45 @@ function ChatWidget({ store }) {
   return (
     <div className="chat-widget">
       {open && (
-        <div className="chat-box">
-          <h4>Live Chat</h4>
+        <div className="chat-box" role="dialog" aria-label="Live chat panel">
+          <div className="chat-head">
+            <div>
+              <p className="chat-kicker">Customer Support</p>
+              <h4>Live Chat</h4>
+            </div>
+            <div className="chat-head-actions">
+              <span className="chat-status">Online</span>
+              <button
+                className="chat-close"
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label="Close chat"
+                title="Close chat"
+              >
+                ×
+              </button>
+            </div>
+          </div>
           <div className="chat-history">
-            {messages.map((m) => <p key={m.id}><strong>{m.sender}:</strong> {m.text}</p>)}
-            {messages.length === 0 && <p>Start chatting with support.</p>}
+            {messages.map((m) => (
+              <div
+                key={m.id}
+                className={`chat-bubble ${m.sender === 'user' ? 'chat-bubble-user' : 'chat-bubble-support'}`}
+              >
+                <span className="chat-bubble-label">{m.sender === 'user' ? 'You' : 'Support'}</span>
+                <p>{m.text}</p>
+              </div>
+            ))}
+            {messages.length === 0 && (
+              <div className="chat-empty">
+                <p>Say hi and our support team will reply soon.</p>
+              </div>
+            )}
           </div>
           <div className="chat-compose">
-            <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message" />
+            <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type your message" />
             <button
-              className="btn btn-solid"
+              className="btn btn-solid chat-send"
               onClick={async () => {
                 if (!text.trim()) {
                   return
@@ -2223,7 +2252,16 @@ function ChatWidget({ store }) {
           </div>
         </div>
       )}
-      <button className="chat-fab" onClick={() => setOpen((v) => !v)}>{open ? 'Close' : 'Chat'}</button>
+      <button
+        className="chat-fab"
+        onClick={() => setOpen((v) => !v)}
+        title={open ? 'Close chat' : 'Open chat'}
+        aria-label={open ? 'Close chat' : 'Open chat'}
+      >
+        <svg className="icon-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+        </svg>
+      </button>
     </div>
   )
 }
@@ -2281,6 +2319,9 @@ function SiteFooter() {
             </a>
           </div>
         </div>
+      </div>
+      <div className="container footer-credit" aria-label="Developer credit">
+        <p>Designed & Developed by Koishik Ahmed</p>
       </div>
     </footer>
   )
