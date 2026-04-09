@@ -21,6 +21,8 @@ import {
 } from './validators'
 
 const UI_STATE_KEY = 'sameria-ui-state-v1'
+const SHOULD_NOTIFY_BACKEND_OFFLINE =
+  typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname)
 
 const fallbackProducts = [
   {
@@ -252,7 +254,9 @@ function useAppStore() {
           coupons: prev.coupons.length ? prev.coupons : fallbackCoupons,
           loading: false,
         }))
-        pushNotification('Backend is offline. Showing sample products.', 'info')
+        if (SHOULD_NOTIFY_BACKEND_OFFLINE) {
+          pushNotification('Backend is offline. Showing sample products.', 'info')
+        }
       }
     }
     bootstrap()
