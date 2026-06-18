@@ -223,7 +223,15 @@ function useAppStore() {
   }, [state.cart, state.wishlist])
 
   useEffect(() => {
-    const socket = createChatSocket()
+    if (!authToken) {
+      if (socketRef.current) {
+        socketRef.current.disconnect()
+        socketRef.current = null
+      }
+      return
+    }
+
+    const socket = createChatSocket(authToken)
     socketRef.current = socket
     socket.on('chat:new', (message) => {
       setState((prev) => ({ ...prev, chatMessages: mergeById([...prev.chatMessages, message]) }))
@@ -232,7 +240,7 @@ function useAppStore() {
       socket.disconnect()
       socketRef.current = null
     }
-  }, [])
+  }, [authToken])
 
   useEffect(() => {
     async function bootstrap() {
@@ -451,7 +459,7 @@ function useAppStore() {
         socket.emit('chat:send', payload)
         return
       }
-      const data = await api('/api/chat/messages', { method: 'POST', body: payload })
+      const data = await api('/api/chat/messages', { method: 'POST', token: authToken, body: payload })
       setState((prev) => ({ ...prev, chatMessages: mergeById([...prev.chatMessages, data.message]) }))
     },
     fetchAuditEntries: async (filters = {}) => {
@@ -566,7 +574,7 @@ function AppLayout({ store }) {
         </Routes>
       </main>
       <SiteFooter />
-      {!inAdmin && <ChatWidget store={store} />}
+      {!inAdmin && state.currentUser && <ChatWidget store={store} />}
       {state.notifications.slice(0, 1).map((n) => <div className={`toast toast-${n.type || 'info'}`} key={n.id}>{n.text}</div>)}
     </div>
   )
@@ -636,11 +644,14 @@ function SiteHeader({ state, actions, cartCount, onLogoutClick }) {
   const [query, setQuery] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [productsOpen, setProductsOpen] = useState(false)
-  const [isDesktopNav, setIsDesktopNav] = useState(false)
   const role = state.currentUser?.role
   const isAdminUser = role === 'admin'
   const isSalesUser = role === 'sales'
   const isStaffUser = isAdminUser || isSalesUser
+  const closeMenus = () => {
+    setMenuOpen(false)
+    setProductsOpen(false)
+  }
   const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) {
@@ -650,25 +661,9 @@ function SiteHeader({ state, actions, cartCount, onLogoutClick }) {
   }, [query, state.products])
 
   useEffect(() => {
-    const media = window.matchMedia('(min-width: 1025px)')
-    const update = () => {
-      setIsDesktopNav(media.matches)
-      if (media.matches) {
-        setProductsOpen(false)
-      }
-    }
-    update()
-    media.addEventListener('change', update)
-    return () => media.removeEventListener('change', update)
-  }, [])
-
-  useEffect(() => {
     const onDocClick = (event) => {
       const target = event.target
       if (!(target instanceof Element)) {
-        return
-      }
-      if (isDesktopNav) {
         return
       }
       if (!target.closest('.top-nav-dropdown')) {
@@ -677,7 +672,7 @@ function SiteHeader({ state, actions, cartCount, onLogoutClick }) {
     }
     document.addEventListener('click', onDocClick)
     return () => document.removeEventListener('click', onDocClick)
-  }, [isDesktopNav])
+  }, [])
 
   return (
     <header className="site-header">
@@ -712,7 +707,10 @@ function SiteHeader({ state, actions, cartCount, onLogoutClick }) {
             </div>
           )}
         </form>
-        <button className="menu-toggle" type="button" onClick={() => setMenuOpen((v) => !v)}>
+        <button className="menu-toggle" type="button" onClick={() => {
+          setMenuOpen((v) => !v)
+          setProductsOpen(false)
+        }}>
           {menuOpen ? 'Close' : 'Menu'}
         </button>
         <nav className={`top-nav ${menuOpen ? 'open' : ''}`}>
@@ -721,31 +719,27 @@ function SiteHeader({ state, actions, cartCount, onLogoutClick }) {
               <button
                 type="button"
                 className="dropdown-trigger"
-                onClick={() => {
-                  if (!isDesktopNav) {
-                    setProductsOpen((v) => !v)
-                  }
-                }}
-                aria-expanded={isDesktopNav ? undefined : productsOpen}
+                onClick={() => setProductsOpen((v) => !v)}
+                aria-expanded={productsOpen}
               >
                 Products
               </button>
               <div className={`top-nav-menu ${productsOpen ? 'open' : ''}`}>
-                <Link to="/products?segment=men" onClick={() => { setMenuOpen(false); setProductsOpen(false) }}>Men</Link>
-                <Link to="/products?segment=women" onClick={() => { setMenuOpen(false); setProductsOpen(false) }}>Women</Link>
+                <Link to="/products?segment=men" onClick={closeMenus}>Men</Link>
+                <Link to="/products?segment=women" onClick={closeMenus}>Women</Link>
               </div>
             </div>
           )}
           {state.currentUser ? (
             <>
               {isAdminUser ? (
-                <Link to="/admin" onClick={() => setMenuOpen(false)}>Admin</Link>
+                <Link to="/admin" onClick={closeMenus}>Admin</Link>
               ) : isSalesUser ? (
-                <Link to="/admin/products" onClick={() => setMenuOpen(false)}>Inventory</Link>
+                <Link to="/admin/products" onClick={closeMenus}>Inventory</Link>
               ) : (
                 <>
-                  <Link to="/wishlist" onClick={() => setMenuOpen(false)}>Wishlist</Link>
-                  <Link to="/cart" onClick={() => setMenuOpen(false)} title={`Cart (${cartCount})`} aria-label={`Cart (${cartCount})`} className="nav-cart-link">
+                  <Link to="/wishlist" onClick={closeMenus}>Wishlist</Link>
+                  <Link to="/cart" onClick={closeMenus} title={`Cart (${cartCount})`} aria-label={`Cart (${cartCount})`} className="nav-cart-link">
                     <svg className="icon-cart" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="9" cy="20" r="1.5" />
                       <circle cx="18" cy="20" r="1.5" />
@@ -753,7 +747,7 @@ function SiteHeader({ state, actions, cartCount, onLogoutClick }) {
                     </svg>
                     {cartCount > 0 && <span className="cart-badge">{cartCount}</span>}
                   </Link>
-                  <Link to="/account" onClick={() => setMenuOpen(false)} title="Profile" aria-label="Profile" className="nav-profile-link">
+                  <Link to="/account" onClick={closeMenus} title="Profile" aria-label="Profile" className="nav-profile-link">
                     <svg className="icon-profile" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                       <circle cx="12" cy="7" r="4" />
@@ -761,12 +755,12 @@ function SiteHeader({ state, actions, cartCount, onLogoutClick }) {
                   </Link>
                 </>
               )}
-              <button className="btn btn-ghost" onClick={() => { onLogoutClick(); setMenuOpen(false) }}>Sign Out</button>
+              <button className="btn btn-ghost" onClick={() => { onLogoutClick(); closeMenus() }}>Sign Out</button>
             </>
           ) : (
             <>
-              <Link className="signin-subtle" to="/signin" onClick={() => setMenuOpen(false)}>Sign In</Link>
-              <Link className="signup-highlight" to="/signup" onClick={() => setMenuOpen(false)}>Sign Up</Link>
+              <Link className="signin-subtle" to="/signin" onClick={closeMenus}>Sign In</Link>
+              <Link className="signup-highlight" to="/signup" onClick={closeMenus}>Sign Up</Link>
             </>
           )}
         </nav>
@@ -785,10 +779,10 @@ function HomePage({ state }) {
         <div className="container hero-grid">
           <div>
             <p className="kicker">Premium Fashion House</p>
-            <h1>SAMERIA: Minimal Luxury, Crafted in Bangladesh</h1>
-            <p>
-              Explore a modern clothing destination with curated silhouettes, elevated fabrics, and thoughtful details.
-            </p>
+            <h1>SAMERIA</h1>
+            <h2>
+              Elegance Woven with Heritage
+            </h2>
             <div className="hero-actions">
               <Link className="btn btn-solid" to="/products">Shop Collection</Link>
               <Link className="btn btn-ghost" to="/signup">Join SAMERIA Club</Link>
@@ -928,14 +922,13 @@ function ProductsPage({ store }) {
         <div className="list-head">
           <h2>All Products ({products.length})</h2>
           <div className="sort-wrap">
-            <label>Sort by
-              <select value={sort} onChange={(e) => setSort(e.target.value)}>
-                <option value="popular">Popular</option>
-                <option value="newest">Newest</option>
-                <option value="price-low">Price: Low to High</option>
-                <option value="price-high">Price: High to Low</option>
-              </select>
-            </label>
+            <label className="sort-label" htmlFor="product-sort">Sort by</label>
+            <select id="product-sort" className="sort-select" value={sort} onChange={(e) => setSort(e.target.value)}>
+              <option value="popular">Popular</option>
+              <option value="newest">Newest</option>
+              <option value="price-low">Price: Low to High</option>
+              <option value="price-high">Price: High to Low</option>
+            </select>
           </div>
         </div>
         {q && <p className="search-chip">Search: {q} <button onClick={() => setParams({})}>Clear</button></p>}
@@ -2300,7 +2293,7 @@ function SiteFooter() {
               <svg className="footer-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M6.8 3.6a2 2 0 0 1 2.2-.5l2 .8a2 2 0 0 1 1.2 1.8l.1 2a2 2 0 0 1-.6 1.5l-1.2 1.2a14.3 14.3 0 0 0 3.1 3.1l1.2-1.2a2 2 0 0 1 1.5-.6l2 .1a2 2 0 0 1 1.8 1.2l.8 2a2 2 0 0 1-.5 2.2l-1 1a3 3 0 0 1-2.5.8c-6.6-.8-11.8-6-12.6-12.6a3 3 0 0 1 .8-2.5z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <span>+880 1750 814651</span>
+              <span>+880 1750-814651</span>
             </a>
           </div>
         </div>

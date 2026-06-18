@@ -20,10 +20,21 @@ const DATA_FILE = path.join(__dirname, 'data', 'db.json')
 const AUDIT_FILE = path.join(__dirname, 'data', 'audit.log')
 const UPLOAD_DIR = path.join(__dirname, 'uploads')
 const PORT = Number(process.env.PORT || 4000)
+const NODE_ENV = process.env.NODE_ENV || 'development'
+const IS_PROD = NODE_ENV === 'production'
 const JWT_SECRET = process.env.JWT_SECRET || 'sameria-dev-secret'
+const INITIAL_ADMIN_PASSWORD = process.env.INITIAL_ADMIN_PASSWORD || 'admin123'
 const CORS_ORIGINS_RAW = process.env.CORS_ORIGINS
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true })
+
+if (IS_PROD && JWT_SECRET === 'sameria-dev-secret') {
+  throw new Error('JWT_SECRET must be set in production.')
+}
+
+if (IS_PROD && INITIAL_ADMIN_PASSWORD === 'admin123') {
+  throw new Error('INITIAL_ADMIN_PASSWORD must be set to a strong value in production.')
+}
 
 if (!CORS_ORIGINS_RAW) {
   throw new Error('CORS_ORIGINS is required. Example: CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173')
@@ -33,6 +44,7 @@ const CORS_ORIGINS = CORS_ORIGINS_RAW
   .split(',')
   .map((x) => x.trim())
   .filter(Boolean)
+const TRUSTED_ORIGIN_SET = new Set(CORS_ORIGINS)
 
 if (!CORS_ORIGINS.length) {
   throw new Error('CORS_ORIGINS must contain at least one allowed origin.')
@@ -45,6 +57,14 @@ const authFailures = new Map()
 
 const app = express()
 const httpServer = createServer(app)
+const corsOptions = {
+  origin: CORS_ORIGINS,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400,
+}
+
 const io = new Server(httpServer, {
   cors: {
     origin: CORS_ORIGINS,
@@ -53,9 +73,49 @@ const io = new Server(httpServer, {
 })
 
 app.disable('x-powered-by')
-app.use(helmet())
-app.use(cors({ origin: CORS_ORIGINS, credentials: true }))
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    referrerPolicy: { policy: 'no-referrer' },
+  }),
+)
+app.use(cors(corsOptions))
 app.use(express.json({ limit: '100kb' }))
+
+function getOriginFromUrl(value) {
+  if (!value) {
+    return null
+  }
+  try {
+    return new URL(value).origin
+  } catch {
+    return null
+  }
+}
+
+function requireTrustedOrigin(req, res, next) {
+  const method = req.method.toUpperCase()
+  const isMutating = method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE'
+  if (!isMutating) {
+    return next()
+  }
+
+  const origin = req.headers.origin
+  if (typeof origin === 'string' && origin.length > 0) {
+    if (!TRUSTED_ORIGIN_SET.has(origin)) {
+      return res.status(403).json({ message: 'Forbidden origin' })
+    }
+    return next()
+  }
+
+  const refererOrigin = getOriginFromUrl(req.headers.referer)
+  if (refererOrigin && !TRUSTED_ORIGIN_SET.has(refererOrigin)) {
+    return res.status(403).json({ message: 'Forbidden origin' })
+  }
+
+  return next()
+}
 
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -82,27 +142,76 @@ const chatLimiter = rateLimit({
 })
 
 app.use('/api', generalLimiter)
+app.use('/api', requireTrustedOrigin)
 app.use('/api/auth', authLimiter)
 app.use('/api/chat/messages', chatLimiter)
-app.use('/api/uploads', express.static(UPLOAD_DIR))
+app.use(
+  '/api/uploads',
+  express.static(UPLOAD_DIR, {
+    fallthrough: false,
+    setHeaders: (res, filePath) => {
+      res.setHeader('X-Content-Type-Options', 'nosniff')
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+      if (path.extname(filePath).toLowerCase() === '.svg') {
+        res.setHeader('Content-Disposition', 'attachment')
+      }
+    },
+  }),
+)
+
+const UPLOAD_MIME_TO_EXT = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+}
 
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
     filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname || '').toLowerCase()
-      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 7)}${ext || '.jpg'}`)
+      const ext = UPLOAD_MIME_TO_EXT[file.mimetype] || '.jpg'
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 7)}${ext}`)
     },
   }),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, cb) => {
-    if (!file.mimetype.startsWith('image/')) {
-      cb(new Error('Only image uploads are allowed'))
+    if (!UPLOAD_MIME_TO_EXT[file.mimetype]) {
+      cb(new Error('Only JPG, PNG, WEBP, and GIF uploads are allowed'))
       return
     }
     cb(null, true)
   },
 })
+
+const noHtmlTagPattern = /^[^<>]*$/
+const controlCharPattern = /[\u0000-\u001F\u007F]/
+const bidiOverridePattern = /[\u202A-\u202E\u2066-\u2069]/
+const safeText = (min, max, fieldName = 'Text') => z
+  .string()
+  .trim()
+  .min(min, `${fieldName} must be at least ${min} characters`)
+  .max(max, `${fieldName} must be at most ${max} characters`)
+  .superRefine((value, ctx) => {
+    if (!noHtmlTagPattern.test(value)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${fieldName} cannot contain HTML-like characters`,
+      })
+    }
+    if (controlCharPattern.test(value)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${fieldName} contains invalid control characters`,
+      })
+    }
+    if (bidiOverridePattern.test(value)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${fieldName} contains unsafe directional characters`,
+      })
+    }
+  })
 
 const discountSchema = z.object({
   enabled: z.boolean(),
@@ -111,13 +220,13 @@ const discountSchema = z.object({
 })
 
 const productSchema = z.object({
-  name: z.string().trim().min(2).max(120),
+  name: safeText(2, 120, 'Product name'),
   price: z.number().min(0).max(1000000),
-  category: z.string().trim().min(2).max(60),
-  sizes: z.array(z.string().trim().min(1).max(10)).min(1).max(20),
-  colors: z.array(z.string().trim().min(1).max(30)).min(1).max(20),
+  category: safeText(2, 60, 'Category'),
+  sizes: z.array(safeText(1, 10, 'Size')).min(1).max(20),
+  colors: z.array(safeText(1, 30, 'Color')).min(1).max(20),
   image: z.string().url(),
-  description: z.string().trim().min(5).max(1000),
+  description: safeText(5, 1000, 'Description'),
   rating: z.number().min(0).max(5),
   reviews: z.number().int().min(0).max(1000000),
   featured: z.boolean(),
@@ -126,7 +235,7 @@ const productSchema = z.object({
 })
 
 const signupSchema = z.object({
-  name: z.string().trim().min(2).max(80),
+  name: safeText(2, 80, 'Name'),
   email: z.string().email().transform((x) => x.trim().toLowerCase()),
   password: z.string().min(8).max(128),
   phone: z.string().trim().min(7).max(30),
@@ -140,7 +249,7 @@ const signinSchema = z.object({
 const cartItemSchema = z.object({
   id: z.string().optional(),
   productId: z.string().min(1).max(120),
-  size: z.string().trim().min(1).max(20),
+  size: safeText(1, 20, 'Size'),
   quantity: z.number().int().min(1).max(999),
 })
 
@@ -153,7 +262,7 @@ const couponSchema = z.object({
 
 const orderCreateSchema = z.object({
   checkout: z.object({
-    address: z.string().trim().min(5).max(300),
+    address: safeText(5, 300, 'Address'),
     phone: z.string().trim().min(7).max(30),
     paymentMethod: z.enum(['Cash on Delivery', 'bKash', 'Nagad', 'Card']),
   }),
@@ -174,7 +283,7 @@ const stockUpdateSchema = z.object({
 })
 
 const salesCreateSchema = z.object({
-  name: z.string().trim().min(2).max(80),
+  name: safeText(2, 80, 'Name'),
   email: z.string().email().transform((x) => x.trim().toLowerCase()),
   password: z.string().min(8).max(128),
   phone: z.string().trim().min(7).max(30),
@@ -182,11 +291,11 @@ const salesCreateSchema = z.object({
 
 const userAccessSchema = z.object({
   blocked: z.boolean(),
-  reason: z.string().trim().max(200).optional(),
+  reason: safeText(1, 200, 'Reason').optional(),
 })
 
 const userProfileSchema = z.object({
-  name: z.string().trim().min(2).max(80).optional(),
+  name: safeText(2, 80, 'Name').optional(),
   email: z.string().email().transform((x) => x.trim().toLowerCase()).optional(),
   phone: z.string().trim().min(7).max(30).optional(),
 })
@@ -197,7 +306,7 @@ const couponApplySchema = z.object({
 
 const chatMessageSchema = z.object({
   sender: z.enum(['user', 'admin']),
-  text: z.string().trim().min(1).max(500),
+  text: safeText(1, 500, 'Message'),
   userEmail: z.string().email().transform((x) => x.trim().toLowerCase()),
 })
 
@@ -446,6 +555,18 @@ let db = initDb()
 
 function createToken(user) {
   return jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' })
+}
+
+function validateChatSender(user, payload) {
+  if (user.role === 'admin') {
+    return payload.sender === 'admin'
+  }
+  return payload.sender === 'user' && payload.userEmail === user.email
+}
+
+function emitChatMessage(message) {
+  io.to('admins').emit('chat:new', message)
+  io.to(`user:${message.userEmail}`).emit('chat:new', message)
 }
 
 function getAuthUser(req) {
@@ -1008,18 +1129,7 @@ app.patch('/api/users/:id/role', requireAdmin, validate(userRoleSchema), (req, r
   if (!user) {
     return res.status(404).json({ message: 'User not found' })
   }
-  if (req.user.role === 'sales' && status !== 'delivered') {
-    return res.status(403).json({ message: 'Sales users can only confirm delivered orders.' })
-  }
-  const previousStatus = order.status
-  if (previousStatus === 'delivered' && status !== 'delivered') {
-    restoreDeliveredInventory(db, order)
-  }
   if (user.id === req.user.id && role !== 'admin') {
-  let inventoryAdjusted = false
-  if (status === 'delivered') {
-    inventoryAdjusted = applyDeliveredInventoryAdjustment(db, order)
-  }
     return res.status(400).json({ message: 'You cannot remove your own admin access.' })
   }
   user.role = role
@@ -1112,8 +1222,21 @@ app.get('/api/chat/messages', requireAuth, validate(chatQuerySchema, 'query'), (
   res.json({ messages: db.chatMessages.filter((m) => m.userEmail === req.user.email) })
 })
 
-app.post('/api/chat/messages', validate(chatMessageSchema), (req, res) => {
+app.post('/api/chat/messages', requireAuth, validate(chatMessageSchema), (req, res) => {
   const payload = req.body
+  if (!validateChatSender(req.user, payload)) {
+    auditLog({
+      action: 'chat.message.send',
+      outcome: 'denied',
+      reason: 'invalid-sender-or-email',
+      ip: getClientIp(req),
+      actorId: req.user.id,
+      actorEmail: req.user.email,
+      actorRole: req.user.role,
+      userAgent: req.headers['user-agent'] || 'unknown',
+    })
+    return res.status(403).json({ message: 'Forbidden' })
+  }
   const message = {
     id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     sender: payload.sender,
@@ -1123,17 +1246,48 @@ app.post('/api/chat/messages', validate(chatMessageSchema), (req, res) => {
   }
   db.chatMessages.push(message)
   writeDb(db)
-  io.emit('chat:new', message)
+  emitChatMessage(message)
   res.status(201).json({ message })
 })
 
+io.use((socket, next) => {
+  const authHeader = socket.handshake.headers?.authorization || ''
+  const authToken = socket.handshake.auth?.token || (authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '')
+
+  if (!authToken) {
+    next(new Error('Unauthorized'))
+    return
+  }
+
+  try {
+    const decoded = jwt.verify(authToken, JWT_SECRET)
+    const user = db.users.find((u) => u.id === decoded.id)
+    if (!user || user.isBlocked) {
+      next(new Error('Unauthorized'))
+      return
+    }
+    socket.user = user
+    next()
+  } catch {
+    next(new Error('Unauthorized'))
+  }
+})
+
 io.on('connection', (socket) => {
+  socket.join(`user:${socket.user.email}`)
+  if (socket.user.role === 'admin') {
+    socket.join('admins')
+  }
+
   socket.on('chat:send', (payload) => {
     const parsed = chatMessageSchema.safeParse(payload)
     if (!parsed.success) {
       return
     }
     const messagePayload = parsed.data
+    if (!validateChatSender(socket.user, messagePayload)) {
+      return
+    }
     const message = {
       id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       sender: messagePayload.sender,
@@ -1143,7 +1297,7 @@ io.on('connection', (socket) => {
     }
     db.chatMessages.push(message)
     writeDb(db)
-    io.emit('chat:new', message)
+    emitChatMessage(message)
   })
 })
 

@@ -253,13 +253,6 @@ button {
   background: rgba(15, 106, 102, 0.1);
 }
 
-@media (min-width: 1025px) {
-  .top-nav-dropdown:hover .top-nav-menu,
-  .top-nav-dropdown:focus-within .top-nav-menu {
-    display: flex;
-  }
-}
-
 .menu-toggle {
   display: none;
   border: 1px solid rgba(23, 52, 49, 0.18);
@@ -621,6 +614,28 @@ main {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 0.7rem;
+}
+
+.sort-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.sort-label {
+  font-size: 0.9rem;
+  color: var(--text);
+  line-height: 1;
+}
+
+.sort-select {
+  min-width: 180px;
+  padding: 0.34rem 2rem 0.34rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  line-height: 1.2;
 }
 
 .search-chip {

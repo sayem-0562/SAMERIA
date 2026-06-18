@@ -52,12 +52,14 @@ export async function api(path, options = {}) {
   return data
 }
 
-export function createChatSocket() {
+export function createChatSocket(token) {
+  const socketToken = token || getToken()
   if (SOCKET_BASE) {
     return io(SOCKET_BASE, {
       path: '/socket.io',
       transports: ['websocket', 'polling'],
       autoConnect: true,
+      auth: { token: socketToken },
     })
   }
 
@@ -65,5 +67,6 @@ export function createChatSocket() {
     path: '/socket.io',
     transports: ['websocket', 'polling'],
     autoConnect: true,
+    auth: { token: socketToken },
   })
 }
